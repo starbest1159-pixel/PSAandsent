@@ -12,7 +12,10 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { username: string; role: string };
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET not configured');
+    }
+    const payload = jwt.verify(token, process.env.JWT_SECRET) as { username: string; role: string };
     req.user = payload;
     next();
   } catch {

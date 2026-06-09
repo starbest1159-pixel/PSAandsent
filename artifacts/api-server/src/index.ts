@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { authRouter } from './routes/auth.js';
 import { merchantsRouter } from './routes/merchants.js';
 import { transactionsRouter } from './routes/transactions.js';
@@ -16,12 +17,36 @@ import { banksRouter } from './routes/banks.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { settingsRouter } from './routes/settings.js';
 
+// Validate required env vars at startup
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET env var is required');
+  process.exit(1);
+}
+if (!process.env.ADMIN_PASSWORD_HASH) {
+  console.error('FATAL: ADMIN_PASSWORD_HASH env var is required');
+  process.exit(1);
+}
+if (!process.env.CORS_ORIGIN) {
+  console.error('FATAL: CORS_ORIGIN env var is required (e.g. https://dashboard.psaipay.com)');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
+
+// Rate limit login endpoint to prevent brute-force attacks
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRouter);
 app.use('/api/merchants', merchantsRouter);

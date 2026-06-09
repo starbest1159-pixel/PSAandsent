@@ -1,34 +1,122 @@
-# PSAistudio-payment-website-SaaS
+# PSAiPay
 
-**คำอธิบาย:** ระบบชำระเงินภายในเว็บไซต์
+A PromptPay-first payment management platform with slip verification, merchant management, and an admin dashboard.
 
-## สรุปสั้น ๆ
-ระบบนี้รองรับการสร้างคำขอชำระจากหน้าเว็บ คืนข้อมูลสำหรับฝั่ง UI เพื่อให้ผู้ใช้งานดำเนินการชำระ และจัดการ lifecycle ของธุรกรรม รวมถึงการรับ callback จากภายนอกเพื่ออัพเดตสถานะ
+## Tech Stack
 
-## คุณสมบัติเด่น
-- สร้าง payment request และจัดการสถานะ
-- รองรับการประมวลผลแบบ synchronous และ asynchronous
-- Webhook receiver สำหรับอัพเดตสถานะธุรกรรม
-- Audit log และรายงานการทำธุรกรรม
-- ออกแบบให้ผสานงานกับระบบอื่น (เช่นระบบจัดการคำขอหรือระบบมอบเงิน)
+| Layer | Technology |
+|-------|-----------|
+| API Server | Express 5 + TypeScript (ESM) |
+| Dashboard | React 18 + Vite + Ant Design + TanStack Query |
+| Database | PostgreSQL 16 + Drizzle ORM |
+| Monorepo | pnpm workspaces + Turborepo |
+| OCR | Tesseract.js |
+| Image Analysis | sharp (ELA tamper detection) |
 
-## การใช้งานด่วน (Conceptual Quickstart)
-1. เริ่มจากการสร้าง payment request ผ่าน API integration endpoint ของระบบ
-2. ระบบคืน token/URL ให้ฝั่งเว็บ
-3. ฝั่งเว็บนำ token/URL ไปใช้เพื่อให้ผู้ใช้ดำเนินการชำระ
-4. รอ webhook/callback เพื่ออัพเดตสถานะธุรกรรม
-5. ตรวจสอบ audit log และรายงานผ่าน admin dashboard
+## Project Structure
 
-> หมายเหตุ: เอกสารนี้เป็นคู่มือเชิงแนวคิด — สำหรับขั้นตอนการติดตั้งจริงและการตั้งค่าพารามิเตอร์ โปรดดู USER_GUIDE.md
+```
+artifacts/
+  api-server/          Express API (port 4000)
+  psai-dashboard/      React SPA (port 5173)
+lib/
+  db/                  Drizzle ORM schemas + client (@psaipay/db)
+docs/
+  payment-system/      Payment architecture docs
+  DEVELOPMENT-ROADMAP.md
+docker-compose.yml     PostgreSQL 16
+```
 
-## ไฟล์สำคัญใน repo
-- PROJECT_OVERVIEW.md — เอกสารภาพรวมและแนวทาง
-- USER_GUIDE.md — คู่มือการใช้งานและการทดสอบ
-- INVESTOR_INVITATION.md — จดหมายเชิญผู้ลงทุน และสรุปความสามารถทีม
-- docs/FLOW_PAYMENT.mmd — sequence diagram / flowchart ของการชำระเงิน
+## Quick Start
 
-## การผสานงานกับ Donate
-ระบบ PSAistudio ถูกออกแบบให้ผสานงานได้ดีกับระบบจัดการคำขอ (Donate) โดยส่ง/รับสถานะผ่าน callback และใช้รหัสเชื่อมโยง (correlation id) เพื่อให้ทั้งสองระบบสามารถติดตามเหตุการณ์ร่วมกันได้
+```bash
+# 1. Install dependencies
+pnpm install
 
-## ติดต่อ
-หากต้องการให้ช่วยติดตั้งหรือปรับแต่งเพิ่มเติม โปรดเปิด issue หรือส่งข้อความมาที่ช่องทางติดต่อที่สะดวก
+# 2. Start PostgreSQL
+docker compose up -d postgres
+
+# 3. Run database migrations (drizzle-kit)
+cd lib/db && pnpm drizzle-kit push
+
+# 4. Create admin password hash
+node -e "console.log(require('bcryptjs').hashSync('your-password', 12))"
+
+# 5. Configure environment variables
+cp .env.example .env
+# Edit .env with your values (see below)
+
+# 6. Start API server
+cd artifacts/api-server && pnpm dev
+
+# 7. Start dashboard
+cd artifacts/psai-dashboard && pnpm dev
+```
+
+## Required Environment Variables
+
+```bash
+# Database
+DATABASE_URL=postgresql://psaipay:psaipay_secret@localhost:5432/psaipay
+
+# Authentication (REQUIRED — app will not start without these)
+JWT_SECRET=your-random-jwt-secret-at-least-32-chars
+ADMIN_PASSWORD_HASH=$2a$12$...   # Generate with bcryptjs
+ADMIN_USERNAME=admin              # Optional, defaults to 'admin'
+
+# CORS (REQUIRED)
+CORS_ORIGIN=https://your-dashboard-domain.com
+
+# Optional
+PORT=4000
+JWT_EXPIRES_IN=8h
+AUTO_APPROVE_LIMIT=5000
+WEBHOOK_SECRET=your-webhook-secret
+PROMPTPAY_CALLBACK_SECRET=your-callback-secret
+```
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | /api/auth/login | No | Login (rate-limited: 10/min) |
+| POST | /api/auth/logout | No | Logout |
+| GET/POST | /api/merchants | Yes | Merchant CRUD |
+| GET/POST | /api/transactions | Yes | Transaction queries |
+| GET/POST | /api/deposits | Yes | Deposit management + QR generation |
+| GET/POST | /api/withdrawals | Yes | Withdrawal management + auto-approve |
+| GET/POST/PUT/DELETE | /api/risk/rules | Yes | Risk rule management |
+| GET/POST | /api/ledger | Yes | Ledger entries |
+| GET | /api/dashboard/kpis | Yes | Dashboard KPIs (from DB) |
+| GET | /api/dashboard/volume | Yes | 7-day volume chart |
+| GET | /api/dashboard/activity | Yes | Recent activity feed |
+| GET/POST | /api/bot/jobs | Yes | Bot job management (incl. RPA polling) |
+| POST | /api/qr/generate | Yes | Generate PromptPay QR |
+| POST | /api/slip/verify | Yes | 9-step slip verification pipeline |
+| GET/POST/DELETE | /api/banks/connections | Yes | Bank connection management |
+| GET/POST | /api/webhooks/logs | Yes | Webhook log management |
+| POST | /api/webhooks/promptpay-callback | No* | PromptPay bank callback receiver |
+| GET/PATCH | /api/settings | Yes | System settings |
+| GET | /health | No | Health check |
+
+*PromptPay callback uses signature verification, not admin auth.
+
+## Slip Verification Pipeline
+
+The `/api/slip/verify` endpoint runs a 9-step verification pipeline:
+
+1. **OCR Extraction** — Tesseract.js (Thai + English)
+2. **Bank Cross-Reference** — Checks for bank callback / RPA verification
+3. **Duplicate Detection** — SHA-256 pixel hash + perceptual hash
+4. **Logo Detection** — Template matching against bank logos
+5. **Tamper Detection** — Error Level Analysis (ELA) via sharp
+6. **Amount Verification** — OCR amount vs expected deposit amount
+7. **Datetime Verification** — OCR datetime vs deposit creation (24h window)
+8. **Sender Verification** — OCR sender account vs merchant account
+9. **PromptPay Ref Validation** — ref1/ref2 format + cross-check
+
+Each step returns a pass/fail/warning status and score (0-100). The overall score is weighted across all steps.
+
+## License
+
+Private — All rights reserved.

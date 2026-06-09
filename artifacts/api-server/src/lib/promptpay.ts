@@ -15,7 +15,7 @@ function tlv(tag: string, value: string): string {
   return `${tag}${len}${value}`;
 }
 
-export function generatePromptPayQR(id: string, amount?: number, type?: string): string {
+export function generatePromptPayQR(id: string, amount?: number, type?: string, ref1?: string, ref2?: string): string {
   const isPhone = /^[0-9]{10}$/.test(id);
   const isTaxId = /^[0-9]{13}$/.test(id);
   const formattedId = isPhone ? `0066${id.slice(1)}` : id;
@@ -28,7 +28,22 @@ export function generatePromptPayQR(id: string, amount?: number, type?: string):
   if (amount && amount > 0) {
     qr += tlv('54', amount.toFixed(2));
   }
+
   qr += tlv('58', 'TH') + tlv('59', 'PSAiPay') + tlv('60', 'Bangkok');
+
+  // Tag 62: Additional Data Field Template — includes ref1/ref2 for bill payment
+  if (ref1 || ref2) {
+    let additionalData = '';
+    if (ref1) {
+      additionalData += tlv('01', ref1);
+    }
+    if (ref2) {
+      additionalData += tlv('02', ref2);
+    }
+    qr += tlv('62', additionalData);
+  }
+
+  // Tag 63: CRC
   qr += '6304';
   qr += crc16(qr);
   return qr;

@@ -1,11 +1,2 @@
-export * from './schema/merchants';
-export * from './schema/transactions';
-export * from './schema/deposits';
-export * from './schema/withdrawals';
-export * from './schema/risk_rules';
-export * from './schema/ledger';
-export * from './schema/bot_jobs';
-export * from './schema/bank_connections';
-export * from './schema/webhook_logs';
-export * from './schema/settings';
-export * from './schema/slip_hashes';
+export * from './schema/index';
+export { db } from './client.js';

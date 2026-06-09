@@ -1,21 +1,35 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { db } from '@psaipay/db';
+import { transactions } from '@psaipay/db';
+import { eq, and, SQL } from 'drizzle-orm';
 
 export const transactionsRouter = Router();
 transactionsRouter.use(requireAuth);
 
-const store: any[] = [];
+transactionsRouter.get('/', async (req, res) => {
+  try {
+    const { status, type, merchantId } = req.query as Record<string, string>;
+    const conditions: SQL[] = [];
+    if (status) conditions.push(eq(transactions.status, status));
+    if (type) conditions.push(eq(transactions.type, type));
+    if (merchantId) conditions.push(eq(transactions.merchantId, merchantId));
 
-transactionsRouter.get('/', (req, res) => {
-  const { status, type, merchantId } = req.query;
-  let data = store;
-  if (status) data = data.filter(x => x.status === status);
-  if (type) data = data.filter(x => x.type === type);
-  if (merchantId) data = data.filter(x => x.merchantId === merchantId);
-  res.json({ data, total: data.length });
+    const data = conditions.length
+      ? await db.select().from(transactions).where(and(...conditions))
+      : await db.select().from(transactions);
+    res.json({ data, total: data.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
 });
-transactionsRouter.get('/:id', (req, res) => {
-  const t = store.find(x => x.id === req.params.id);
-  if (!t) return res.status(404).json({ error: 'Not found' });
-  res.json(t);
+
+transactionsRouter.get('/:id', async (req, res) => {
+  try {
+    const [t] = await db.select().from(transactions).where(eq(transactions.id, req.params.id));
+    if (!t) return res.status(404).json({ error: 'Not found' });
+    res.json(t);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch transaction' });
+  }
 });

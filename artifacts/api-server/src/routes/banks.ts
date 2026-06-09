@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { db } from '@psaipay/db';
+import { bankConnections } from '@psaipay/db';
+import { eq } from 'drizzle-orm';
 
 export const banksRouter = Router();
 banksRouter.use(requireAuth);
@@ -15,18 +18,38 @@ const THAI_BANKS = [
   { code: 'GSB', name: 'Government Savings Bank', color: '#FF69B4' },
 ];
 
-const connections: any[] = [];
-
 banksRouter.get('/list', (_req, res) => res.json(THAI_BANKS));
-banksRouter.get('/connections', (_req, res) => res.json(connections));
-banksRouter.post('/connections', (req, res) => {
-  const c = { id: crypto.randomUUID(), ...req.body, isActive: true, createdAt: new Date() };
-  connections.push(c);
-  res.status(201).json(c);
+
+banksRouter.get('/connections', async (_req, res) => {
+  try {
+    const data = await db.select().from(bankConnections);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch bank connections' });
+  }
 });
-banksRouter.delete('/connections/:id', (req, res) => {
-  const i = connections.findIndex(x => x.id === req.params.id);
-  if (i === -1) return res.status(404).json({ error: 'Not found' });
-  connections.splice(i, 1);
-  res.json({ message: 'Deleted' });
+
+banksRouter.post('/connections', async (req, res) => {
+  try {
+    const [c] = await db.insert(bankConnections).values({
+      merchantId: req.body.merchantId,
+      bankCode: req.body.bankCode,
+      accountNumber: req.body.accountNumber,
+      accountName: req.body.accountName,
+      isActive: true,
+    }).returning();
+    res.status(201).json(c);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create bank connection' });
+  }
+});
+
+banksRouter.delete('/connections/:id', async (req, res) => {
+  try {
+    const [c] = await db.delete(bankConnections).where(eq(bankConnections.id, req.params.id)).returning();
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete bank connection' });
+  }
 });
